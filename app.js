@@ -6,6 +6,7 @@ const canvasContext = canvas.getContext("2d");
 const FPS = 30;
 const ASTEROIDS_COUNT = 5;
 const ASTEROIDS_MAX_LIVES = 4;
+const PLAYER_MAX_LIVES = 3;
 
 const keys = {
   z: "z",
@@ -22,6 +23,20 @@ const keys = {
 const distanceBetweenPoints = (x1, y1, x2, y2) =>
   Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 
+const drawText = ({
+  fontSize = 20,
+  align = "start",
+  color = "#fff",
+  text = "",
+  x = 0,
+  y = 0,
+} = {}) => {
+  canvasContext.font = `${fontSize}px Arial`;
+  canvasContext.fillStyle = color;
+  canvasContext.textAlign = align;
+  canvasContext.fillText(text, x, y);
+};
+
 class Player {
   constructor() {
     this.x = canvas.width / 2;
@@ -37,6 +52,8 @@ class Player {
     this.thrustY = 0;
     this.thrustAcceleration = 5;
     this.friction = 0.99;
+    this.lives = PLAYER_MAX_LIVES;
+    this.hasImmunity = false;
   }
 
   draw() {
@@ -135,8 +152,9 @@ class Player {
 }
 
 class Asteroid {
-  constructor() {
-    this.#setCoords();
+  constructor(id) {
+    this.id = id;
+    this.setCoords();
     this.speed = 100;
     this.size = 50;
     this.color = `rgb(${1 + Math.random() * 254}, ${1 + Math.random() * 254}, ${
@@ -149,19 +167,19 @@ class Asteroid {
       ((Math.random() * this.speed) / FPS) * Math.random() < 0.5 ? 1 : -1;
     this.radius = (this.size * this.lives) / 2;
     this.angle = Math.random() * Math.PI * 2;
-    while (
-      distanceBetweenPoints(
-        canvas.width / 2,
-        canvas.height / 2,
-        this.x,
-        this.y
-      ) <
-        this.size * 2 + this.radius ||
-      this.#isOffXBounds() ||
-      this.#isOffYBounds()
-    ) {
-      this.#setCoords();
-    }
+    // while (
+    //   distanceBetweenPoints(
+    //     canvas.width / 2,
+    //     canvas.height / 2,
+    //     this.x,
+    //     this.y
+    //   ) <
+    //     this.size * 2 + this.radius ||
+    //   this.#isOffXBounds() ||
+    //   this.#isOffYBounds()
+    // ) {
+    //   this.#setCoords();
+    // }
   }
 
   draw() {
@@ -171,43 +189,35 @@ class Asteroid {
     canvasContext.closePath();
     canvasContext.fill();
 
-    canvasContext.font = "20px Arial";
-    canvasContext.fillStyle = "white";
-    canvasContext.textAlign = "center";
-    canvasContext.fillText(this.lives, this.x, this.y);
+    drawText({
+      align: "center",
+      text: this.lives,
+      x: this.x,
+      y: this.y,
+    });
 
-    if (this.#isOffXBounds()) {
+    if (this.isOffXBounds()) {
       this.velocityX *= -1;
     }
 
-    if (this.#isOffYBounds()) {
+    if (this.isOffYBounds()) {
       this.velocityY *= -1;
     }
 
     this.x += this.velocityX;
     this.y += this.velocityY;
-
-    // if (this.x < 0 - this.radius) {
-    //   this.x = canvas.width + this.radius;
-    // } else if (this.x > 0 - this.radius) {
-    //   this.x = 0 - this.radius;
-    // }
-
-    // if(this.y < 0 - this.radius) {
-
-    // }
   }
 
-  #setCoords() {
+  setCoords() {
     this.x = Math.floor(Math.random() * canvas.width);
     this.y = Math.floor(Math.random() * canvas.height);
   }
 
-  #isOffXBounds() {
+  isOffXBounds() {
     return this.x + this.radius > canvas.width || this.x - this.radius < 0;
   }
 
-  #isOffYBounds() {
+  isOffYBounds() {
     return this.y + this.radius > canvas.height || this.y - this.radius < 0;
   }
 }
@@ -227,13 +237,15 @@ class App {
     this.player = new Player();
 
     for (let i = 0; i < ASTEROIDS_COUNT; i++) {
-      this.asteroids.push(new Asteroid());
+      this.asteroids.push(new Asteroid(i));
     }
 
-    this.#initListeners();
+    this.#addEventListeners();
     this.#drawAsteroids();
 
-    setInterval(() => this.#update(), 1000 / FPS);
+    this.interval = setInterval(() => this.#update(), 1000 / FPS);
+
+    this.#checkInitialCollisions();
   }
 
   #update() {
@@ -242,44 +254,8 @@ class App {
     this.player.draw();
     this.player.thrust();
     this.#drawAsteroids();
-  }
-
-  #initListeners() {
-    document.addEventListener("keydown", (event) => {
-      if (keys.arrows[event.key]) {
-        this.player.isThrusting = true;
-        this.player.thrust(event.key);
-        return;
-      }
-
-      switch (event.key) {
-        case keys.z:
-          this.player.rotate(1);
-          break;
-
-        case keys.c:
-          this.player.rotate(-1);
-          break;
-      }
-    });
-
-    document.addEventListener("keyup", (event) => {
-      if (keys.arrows[event.key]) {
-        this.player.isThrusting = false;
-        this.player.thrust();
-        return;
-      }
-
-      switch (event.key) {
-        case keys.z:
-          this.player.rotate(0);
-          break;
-
-        case keys.c:
-          this.player.rotate(0);
-          break;
-      }
-    });
+    this.#setStats();
+    this.#checkGameOver();
   }
 
   #setCanvasContext() {
@@ -287,10 +263,159 @@ class App {
     canvasContext.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  #onKeyDown = (event) => {
+    if (keys.arrows[event.key]) {
+      this.player.isThrusting = true;
+      this.player.thrust(event.key);
+      return;
+    }
+
+    switch (event.key) {
+      case keys.z:
+        this.player.rotate(1);
+        break;
+
+      case keys.c:
+        this.player.rotate(-1);
+        break;
+    }
+  };
+
+  #onKeyUp = (event) => {
+    if (keys.arrows[event.key]) {
+      this.player.isThrusting = false;
+      this.player.thrust();
+      return;
+    }
+
+    switch (event.key) {
+      case keys.z:
+        this.player.rotate(0);
+        break;
+
+      case keys.c:
+        this.player.rotate(0);
+        break;
+    }
+  };
+
+  #addEventListeners() {
+    document.addEventListener("keydown", this.#onKeyDown);
+    document.addEventListener("keyup", this.#onKeyUp);
+  }
+
+  #removeEventListeners() {
+    document.removeEventListener("keydown", this.#onKeyDown);
+    document.removeEventListener("keyup", this.#onKeyDown);
+  }
+
   #drawAsteroids() {
     this.asteroids.forEach((asteroid) => {
       asteroid.draw();
+      this.#checkCollisions(asteroid);
     });
+  }
+
+  #checkInitialCollisions() {
+    this.asteroids.forEach((asteroid) => {
+      while (
+        distanceBetweenPoints(
+          canvas.width / 2,
+          canvas.height / 2,
+          asteroid.x,
+          asteroid.y
+        ) <
+          asteroid.size * 2 + asteroid.radius ||
+        asteroid.isOffXBounds() ||
+        asteroid.isOffYBounds() ||
+        this.#getCollidingAsteroid(asteroid)
+      ) {
+        asteroid.setCoords();
+      }
+    });
+  }
+
+  /** @param {Asteroid} asteroid */
+  #getCollidingAsteroid(asteroid) {
+    return this.asteroids.find(
+      (a) =>
+        a.id !== asteroid.id &&
+        distanceBetweenPoints(a.x, a.y, asteroid.x, asteroid.y) <
+          a.radius + asteroid.radius
+    );
+  }
+
+  /** @param {Asteroid} asteroid */
+  #checkCollisions(asteroid) {
+    const collidingAsteroid = this.#getCollidingAsteroid(asteroid);
+
+    if (collidingAsteroid) {
+      collidingAsteroid.velocityX *= -1;
+      collidingAsteroid.velocityY *= -1;
+    }
+
+    if (
+      distanceBetweenPoints(
+        this.player.x,
+        this.player.y,
+        asteroid.x,
+        asteroid.y
+      ) <
+      this.player.radius + asteroid.radius
+    ) {
+      if (this.player.lives > 0 && !this.player.hasImmunity) {
+        this.player.lives -= 1;
+        this.player.x = canvas.width / 2;
+        this.player.y = canvas.height / 2;
+        this.player.hasImmunity = true;
+        setTimeout(() => {
+          this.player.hasImmunity = false;
+        }, 3000);
+      }
+    }
+  }
+
+  #checkGameOver() {
+    if (this.player.lives <= 0) {
+      this.asteroids.forEach((asteroid) => {
+        asteroid.velocityX = 0;
+        asteroid.velocityY = 0;
+
+        this.#removeEventListeners();
+
+        clearInterval(this.interval);
+
+        canvasContext.fillStyle = "#00000025";
+        canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawText({
+          fontSize: 64,
+          align: "center",
+          text: "Game over",
+          color: "#f00",
+          x: canvas.width / 2,
+          y: canvas.height / 2,
+        });
+      });
+    }
+  }
+
+  #setStats() {
+    drawText({
+      fontSize: 32,
+      text: `Lives: ${this.player.lives}`,
+      x: 16,
+      y: 32,
+    });
+
+    if (this.player.hasImmunity && this.player.lives > 0) {
+      drawText({
+        fontSize: 24,
+        text: "You have immunity",
+        x: 16,
+        y: 64,
+      });
+    }
   }
 }
 
