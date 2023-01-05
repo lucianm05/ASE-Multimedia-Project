@@ -6,7 +6,10 @@ const canvasContext = canvas.getContext("2d");
 const FPS = 30;
 const ASTEROIDS_COUNT = 5;
 const ASTEROIDS_MAX_LIVES = 4;
+const PLAYER_SIZE = 30;
 const PLAYER_MAX_LIVES = 3;
+const ROCKET_SPEED = 700;
+const ROCKET_RADIUS = 3;
 
 const keys = {
   z: "z",
@@ -37,13 +40,40 @@ const drawText = ({
   canvasContext.fillText(text, x, y);
 };
 
+class Rocket {
+  constructor(id, x, y, velocityX, velocityY) {
+    this.id = id;
+    this.x = x;
+    this.y = y;
+    this.velocityX = velocityX;
+    this.velocityY = velocityY;
+    this.radius = ROCKET_RADIUS;
+    this.hasHitAsteroid = false;
+  }
+
+  /** @param {Player} playerAngle */
+  draw() {
+    canvasContext.fillStyle = "#f5b128";
+    canvasContext.beginPath();
+    canvasContext.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false);
+    canvasContext.closePath();
+    canvasContext.fill();
+
+    this.x += this.velocityX;
+    this.y += this.velocityY;
+  }
+}
+
 class Player {
+  /** @type {Rocket[]} */
+  rockets;
+
   constructor() {
     this.x = canvas.width / 2;
     this.y = canvas.height / 2;
     this.rotation = 0;
     this.rotationSpeed = 360;
-    this.size = 30;
+    this.size = PLAYER_SIZE;
     this.radius = this.size / 2;
     this.angle = (90 / 180) * Math.PI;
     this.strokeColor = "white";
@@ -54,6 +84,8 @@ class Player {
     this.friction = 0.99;
     this.lives = PLAYER_MAX_LIVES;
     this.hasImmunity = false;
+    this.rockets = [];
+    this.rocketSpeed = ROCKET_SPEED;
   }
 
   draw() {
@@ -149,6 +181,21 @@ class Player {
       this.y = 0 - this.radius;
     }
   }
+
+  shoot() {
+    const angleCos = Math.cos(this.angle);
+    const angleSin = Math.sin(this.angle);
+
+    this.rockets.push(
+      new Rocket(
+        this.rockets.length + 1,
+        this.x + (4 / 3) * this.radius * angleCos,
+        this.y - (4 / 3) * this.radius * angleSin,
+        (this.rocketSpeed * angleCos) / FPS,
+        -(this.rocketSpeed * angleSin) / FPS
+      )
+    );
+  }
 }
 
 class Asteroid {
@@ -165,21 +212,8 @@ class Asteroid {
       ((Math.random() * this.speed) / FPS) * (Math.random() < 0.5 ? 1 : -1);
     this.velocityY =
       ((Math.random() * this.speed) / FPS) * Math.random() < 0.5 ? 1 : -1;
-    this.radius = (this.size * this.lives) / 2;
+    this.setRadius();
     this.angle = Math.random() * Math.PI * 2;
-    // while (
-    //   distanceBetweenPoints(
-    //     canvas.width / 2,
-    //     canvas.height / 2,
-    //     this.x,
-    //     this.y
-    //   ) <
-    //     this.size * 2 + this.radius ||
-    //   this.#isOffXBounds() ||
-    //   this.#isOffYBounds()
-    // ) {
-    //   this.#setCoords();
-    // }
   }
 
   draw() {
@@ -213,6 +247,10 @@ class Asteroid {
     this.y = Math.floor(Math.random() * canvas.height);
   }
 
+  setRadius() {
+    this.radius = (this.size * this.lives) / 2;
+  }
+
   isOffXBounds() {
     return this.x + this.radius > canvas.width || this.x - this.radius < 0;
   }
@@ -241,7 +279,7 @@ class App {
     }
 
     this.#addEventListeners();
-    this.#drawAsteroids();
+    this.#updateAsteroids();
 
     this.interval = setInterval(() => this.#update(), 1000 / FPS);
 
@@ -249,71 +287,44 @@ class App {
   }
 
   #update() {
-    console.log("updating game...");
     this.#setCanvasContext();
-    this.player.draw();
-    this.player.thrust();
-    this.#drawAsteroids();
+    this.#updatePlayer();
+    this.#updateAsteroids();
+    this.#updateRockets();
     this.#setStats();
     this.#checkGameOver();
+  }
+
+  #updatePlayer() {
+    this.player.draw();
+    this.player.thrust();
+  }
+
+  #updateAsteroids() {
+    this.asteroids.forEach((asteroid) => {
+      asteroid.draw();
+      this.#checkCollisions(asteroid);
+    });
+  }
+
+  #updateRockets() {
+    this.player.rockets = this.player.rockets.filter(
+      (rocket) =>
+        rocket.x + rocket.radius < canvas.width &&
+        rocket.x > 0 &&
+        rocket.y + rocket.radius < canvas.height &&
+        rocket.y > 0 &&
+        !rocket.hasHitAsteroid
+    );
+
+    this.player.rockets.forEach((rocket) => {
+      rocket.draw();
+    });
   }
 
   #setCanvasContext() {
     canvasContext.fillStyle = "#0e0836";
     canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-  }
-
-  #onKeyDown = (event) => {
-    if (keys.arrows[event.key]) {
-      this.player.isThrusting = true;
-      this.player.thrust(event.key);
-      return;
-    }
-
-    switch (event.key) {
-      case keys.z:
-        this.player.rotate(1);
-        break;
-
-      case keys.c:
-        this.player.rotate(-1);
-        break;
-    }
-  };
-
-  #onKeyUp = (event) => {
-    if (keys.arrows[event.key]) {
-      this.player.isThrusting = false;
-      this.player.thrust();
-      return;
-    }
-
-    switch (event.key) {
-      case keys.z:
-        this.player.rotate(0);
-        break;
-
-      case keys.c:
-        this.player.rotate(0);
-        break;
-    }
-  };
-
-  #addEventListeners() {
-    document.addEventListener("keydown", this.#onKeyDown);
-    document.addEventListener("keyup", this.#onKeyUp);
-  }
-
-  #removeEventListeners() {
-    document.removeEventListener("keydown", this.#onKeyDown);
-    document.removeEventListener("keyup", this.#onKeyDown);
-  }
-
-  #drawAsteroids() {
-    this.asteroids.forEach((asteroid) => {
-      asteroid.draw();
-      this.#checkCollisions(asteroid);
-    });
   }
 
   #checkInitialCollisions() {
@@ -336,18 +347,15 @@ class App {
   }
 
   /** @param {Asteroid} asteroid */
-  #getCollidingAsteroid(asteroid) {
-    return this.asteroids.find(
-      (a) =>
-        a.id !== asteroid.id &&
-        distanceBetweenPoints(a.x, a.y, asteroid.x, asteroid.y) <
-          a.radius + asteroid.radius
-    );
-  }
-
-  /** @param {Asteroid} asteroid */
   #checkCollisions(asteroid) {
+    const collidingRocket = this.#getCollidingRocket(asteroid);
     const collidingAsteroid = this.#getCollidingAsteroid(asteroid);
+
+    if (collidingRocket && !collidingRocket.hasHitAsteroid) {
+      collidingRocket.hasHitAsteroid = true;
+      asteroid.lives -= 1;
+      asteroid.setRadius();
+    }
 
     if (collidingAsteroid) {
       collidingAsteroid.velocityX *= -1;
@@ -373,6 +381,27 @@ class App {
         }, 3000);
       }
     }
+
+    this.asteroids = this.asteroids.filter((a) => a.lives > 0);
+  }
+
+  /** @param {Asteroid} asteroid */
+  #getCollidingAsteroid(asteroid) {
+    return this.asteroids.find(
+      (a) =>
+        a.id !== asteroid.id &&
+        distanceBetweenPoints(a.x, a.y, asteroid.x, asteroid.y) <
+          a.radius + asteroid.radius
+    );
+  }
+
+  /** @param {Asteroid} asteroid */
+  #getCollidingRocket(asteroid) {
+    return this.player.rockets.find(
+      (rocket) =>
+        distanceBetweenPoints(asteroid.x, asteroid.y, rocket.x, rocket.y) <
+        asteroid.radius + rocket.radius
+    );
   }
 
   #checkGameOver() {
@@ -416,6 +445,56 @@ class App {
         y: 64,
       });
     }
+  }
+
+  #onKeyDown = (event) => {
+    if (keys.arrows[event.key]) {
+      this.player.isThrusting = true;
+      this.player.thrust(event.key);
+      return;
+    }
+
+    switch (event.key) {
+      case keys.z:
+        this.player.rotate(1);
+        break;
+
+      case keys.x:
+        this.player.shoot();
+        break;
+
+      case keys.c:
+        this.player.rotate(-1);
+        break;
+    }
+  };
+
+  #onKeyUp = (event) => {
+    if (keys.arrows[event.key]) {
+      this.player.isThrusting = false;
+      this.player.thrust();
+      return;
+    }
+
+    switch (event.key) {
+      case keys.z:
+        this.player.rotate(0);
+        break;
+
+      case keys.c:
+        this.player.rotate(0);
+        break;
+    }
+  };
+
+  #addEventListeners() {
+    document.addEventListener("keydown", this.#onKeyDown);
+    document.addEventListener("keyup", this.#onKeyUp);
+  }
+
+  #removeEventListeners() {
+    document.removeEventListener("keydown", this.#onKeyDown);
+    document.removeEventListener("keyup", this.#onKeyDown);
   }
 }
 
