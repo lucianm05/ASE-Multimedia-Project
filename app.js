@@ -1,4 +1,5 @@
 "use strict";
+const form = document.getElementById("form");
 const canvas = document.getElementById("game-canvas");
 /** @type {CanvasRenderingContext2D} */
 const canvasContext = canvas.getContext("2d");
@@ -10,6 +11,7 @@ const PLAYER_SIZE = 30;
 const PLAYER_MAX_LIVES = 3;
 const ROCKET_SPEED = 700;
 const ROCKET_RADIUS = 3;
+const SCORE_MULTIPLIER = 50;
 
 const keys = {
   z: "z",
@@ -23,6 +25,12 @@ const keys = {
   },
 };
 
+const LevelToAsteroidsCountMap = {
+  1: 5,
+  2: 7,
+  3: 10,
+};
+
 const distanceBetweenPoints = (x1, y1, x2, y2) =>
   Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 
@@ -34,7 +42,7 @@ const drawText = ({
   x = 0,
   y = 0,
 } = {}) => {
-  canvasContext.font = `${fontSize}px Arial`;
+  canvasContext.font = `${fontSize}px Rowdies`;
   canvasContext.fillStyle = color;
   canvasContext.textAlign = align;
   canvasContext.fillText(text, x, y);
@@ -69,8 +77,7 @@ class Player {
   rockets;
 
   constructor() {
-    this.x = canvas.width / 2;
-    this.y = canvas.height / 2;
+    this.setInitialCoords();
     this.rotation = 0;
     this.rotationSpeed = 360;
     this.size = PLAYER_SIZE;
@@ -86,6 +93,8 @@ class Player {
     this.hasImmunity = false;
     this.rockets = [];
     this.rocketSpeed = ROCKET_SPEED;
+    this.score = 0;
+    this.nickname = "";
   }
 
   draw() {
@@ -196,6 +205,18 @@ class Player {
       )
     );
   }
+
+  giveImmunity() {
+    this.hasImmunity = true;
+    setTimeout(() => {
+      this.hasImmunity = false;
+    }, 3000);
+  }
+
+  setInitialCoords() {
+    this.x = canvas.width / 2;
+    this.y = canvas.height / 2;
+  }
 }
 
 class Asteroid {
@@ -207,7 +228,8 @@ class Asteroid {
     this.color = `rgb(${1 + Math.random() * 254}, ${1 + Math.random() * 254}, ${
       1 + Math.random() * 254
     })`;
-    this.lives = Math.ceil(Math.random() * ASTEROIDS_MAX_LIVES);
+    this.initialLives = Math.ceil(Math.random() * ASTEROIDS_MAX_LIVES);
+    this.lives = this.initialLives;
     this.velocityX =
       ((Math.random() * this.speed) / FPS) * (Math.random() < 0.5 ? 1 : -1);
     this.velocityY =
@@ -268,16 +290,15 @@ class App {
 
   constructor() {
     console.log("initializing game...");
-
+    form.style.display = "none";
+    canvas.style.display = "block";
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
+    this.level = 1;
     this.player = new Player();
 
-    for (let i = 0; i < ASTEROIDS_COUNT; i++) {
-      this.asteroids.push(new Asteroid(i));
-    }
-
+    this.#createAsteroids(LevelToAsteroidsCountMap[this.level]);
     this.#addEventListeners();
     this.#updateAsteroids();
 
@@ -292,6 +313,7 @@ class App {
     this.#updateAsteroids();
     this.#updateRockets();
     this.#setStats();
+    this.#checkNewLevel();
     this.#checkGameOver();
   }
 
@@ -357,6 +379,10 @@ class App {
       asteroid.setRadius();
     }
 
+    if (asteroid.lives <= 0) {
+      this.player.score += asteroid.initialLives * SCORE_MULTIPLIER;
+    }
+
     if (collidingAsteroid) {
       collidingAsteroid.velocityX *= -1;
       collidingAsteroid.velocityY *= -1;
@@ -373,12 +399,8 @@ class App {
     ) {
       if (this.player.lives > 0 && !this.player.hasImmunity) {
         this.player.lives -= 1;
-        this.player.x = canvas.width / 2;
-        this.player.y = canvas.height / 2;
-        this.player.hasImmunity = true;
-        setTimeout(() => {
-          this.player.hasImmunity = false;
-        }, 3000);
+        this.player.setInitialCoords();
+        this.player.giveImmunity();
       }
     }
 
@@ -404,15 +426,47 @@ class App {
     );
   }
 
+  #checkNewLevel() {
+    if (!this.asteroids.length) {
+      if (this.level === 3) {
+        this.#cleanup();
+        this.#update();
+
+        canvasContext.fillStyle = "#00000025";
+        canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawText({
+          fontSize: 64,
+          align: "center",
+          text: "You won! Congratulations!",
+          color: "#0f0",
+          x: canvas.width / 2,
+          y: canvas.height / 2,
+        });
+
+        localStorage.setItem(
+          `${this.player.nickname}-${this.player.score}`,
+          new Date().toISOString()
+        );
+      }
+
+      if (this.level < 3 && !this.asteroids.length) {
+        this.level += 1;
+        this.#createAsteroids(LevelToAsteroidsCountMap[this.level]);
+        this.player.setInitialCoords();
+        this.player.giveImmunity();
+        this.#checkInitialCollisions();
+      }
+    }
+  }
+
   #checkGameOver() {
     if (this.player.lives <= 0) {
       this.asteroids.forEach((asteroid) => {
         asteroid.velocityX = 0;
         asteroid.velocityY = 0;
 
-        this.#removeEventListeners();
-
-        clearInterval(this.interval);
+        this.#cleanup();
 
         canvasContext.fillStyle = "#00000025";
         canvasContext.fillRect(0, 0, canvas.width, canvas.height);
@@ -426,6 +480,17 @@ class App {
           y: canvas.height / 2,
         });
       });
+    }
+  }
+
+  #cleanup() {
+    this.#removeEventListeners();
+    clearInterval(this.interval);
+  }
+
+  #createAsteroids(count) {
+    for (let i = 0; i < count; i++) {
+      this.asteroids.push(new Asteroid(i));
     }
   }
 
@@ -445,6 +510,20 @@ class App {
         y: 64,
       });
     }
+
+    drawText({
+      fontSize: 32,
+      text: `Level: ${this.level}`,
+      x: 16,
+      y: canvas.height - 64,
+    });
+
+    drawText({
+      fontSize: 32,
+      text: `Score: ${this.player.score}`,
+      x: 16,
+      y: canvas.height - 16,
+    });
   }
 
   #onKeyDown = (event) => {
@@ -498,6 +577,13 @@ class App {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = form.querySelector("input");
+  const nickname = input.value;
+
+  if (!nickname) return;
+
   const app = new App();
+  app.player.nickname = nickname;
 });
