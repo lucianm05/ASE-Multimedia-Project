@@ -7,7 +7,6 @@ const canvas = document.getElementById("game-canvas");
 const canvasContext = canvas.getContext("2d");
 
 const FPS = 30;
-const ASTEROIDS_COUNT = 5;
 const ASTEROIDS_MAX_LIVES = 4;
 const PLAYER_SIZE = 30;
 const PLAYER_MAX_LIVES = 3;
