@@ -27,12 +27,14 @@ const keys = {
   },
 };
 
+// Determinarea numărului de asteroizi în funcție de nivel
 const LevelToAsteroidsCountMap = {
   1: 5,
   2: 7,
   3: 10,
 };
 
+// Determinarea culorii asteroidului în funcție de numărul de vieți al acestuia
 const AsteroidLivesToColorsMap = {
   1: "#3146e8",
   2: "#43b1e8",
@@ -45,6 +47,7 @@ const toggleElement = (element) => {
   element.classList.toggle("hide");
 };
 
+// Determinarea distanței dintre două puncte
 const distanceBetweenPoints = (x1, y1, x2, y2) =>
   Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 
@@ -73,7 +76,7 @@ class Rocket {
     this.hasHitAsteroid = false;
   }
 
-  /** @param {Player} playerAngle */
+  // Desenare rachetă sub formă de cerc
   draw() {
     canvasContext.fillStyle = "#f5b128";
     canvasContext.beginPath();
@@ -110,6 +113,7 @@ class Player {
     this.nickname = "";
   }
 
+  // Desenare player sub formă de triunghi
   draw() {
     canvasContext.strokeStyle = this.strokeColor;
     canvasContext.lineWidth = this.size / 20;
@@ -130,9 +134,10 @@ class Player {
     canvasContext.stroke();
   }
 
-  /** @param {number} direction */
+  // Rotire player în funcție de direcția oferită (-1 sau 1)
+  /** @param {-1 | 1} direction */
   rotate(direction) {
-    if (!direction || typeof direction !== "number") {
+    if (!direction || (direction !== 1 && direction !== -1)) {
       this.rotation = 0;
       return;
     }
@@ -141,6 +146,7 @@ class Player {
     this.angle += this.rotation;
   }
 
+  // Mișcarea playerului pe canvas în funcție de direcția oferită (sus/jos/stânga/dreapta)
   /** @param {keyof typeof keys.arrows} direction */
   thrust(direction) {
     if (this.isThrusting) {
@@ -202,6 +208,7 @@ class Player {
     }
   }
 
+  // Lansarea rachetei, maxim 3 rachete simultan
   shoot() {
     const angleCos = Math.cos(this.angle);
     const angleSin = Math.sin(this.angle);
@@ -219,6 +226,7 @@ class Player {
     );
   }
 
+  // Acordarea imunității și resetarea acesteia după 3 secunde
   giveImmunity() {
     this.hasImmunity = true;
     setTimeout(() => {
@@ -226,6 +234,7 @@ class Player {
     }, 3000);
   }
 
+  // Setare coordonate inițiale
   setInitialCoords() {
     this.x = canvas.width / 2;
     this.y = canvas.height / 2;
@@ -249,6 +258,7 @@ class Asteroid {
     this.angle = Math.random() * Math.PI * 2;
   }
 
+  // Desenarea unui asteroid sub formă de cerc, scrierea numărului de vieți în centrul lui și modificarea traiectoriei în urma coliziunii cu limitele ecranului
   draw() {
     canvasContext.beginPath();
     canvasContext.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
@@ -275,15 +285,18 @@ class Asteroid {
     this.y += this.velocityY;
   }
 
+  // Setarea coordonatelor
   setCoords() {
     this.x = Math.floor(Math.random() * canvas.width);
     this.y = Math.floor(Math.random() * canvas.height);
   }
 
+  // Setarea razei
   setRadius() {
     this.radius = (this.size * this.lives) / 2;
   }
 
+  // Setarea culorii în funcție de numărul actual de vieți
   setColor() {
     this.color = AsteroidLivesToColorsMap[this.lives];
   }
@@ -326,6 +339,7 @@ class App {
     this.#checkInitialCollisions();
   }
 
+  // Actualizare joc
   #update() {
     this.#setCanvasContext();
     this.#updateEntities();
@@ -334,11 +348,13 @@ class App {
     this.#checkGameOver();
   }
 
+  // Actualizare player (desenare și mișcare)
   #updatePlayer() {
     this.player.draw();
     this.player.thrust();
   }
 
+  // Actualizare asteroizi (desenare și verificare coliziuni)
   #updateAsteroids() {
     this.asteroids.forEach((asteroid) => {
       asteroid.draw();
@@ -346,6 +362,7 @@ class App {
     });
   }
 
+  // Actualizare rachete (eliminarea rachetelor care au ieșit din ecran sau care au lovit asteroid și desenarea celor rămase)
   #updateRockets() {
     this.player.rockets = this.player.rockets.filter(
       (rocket) =>
@@ -372,6 +389,7 @@ class App {
     canvasContext.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  // Verificare coliziuni asteroizi pentru a nu genera asteroizi în mijlocul ecranului (poziția inițială a playerului sau în afara ecranului)
   #checkInitialCollisions() {
     this.asteroids.forEach((asteroid) => {
       while (
@@ -391,6 +409,7 @@ class App {
     });
   }
 
+  // Verificare coliziuni asteroid-asteroid sau rachetă-asteroid
   /** @param {Asteroid} asteroid */
   #checkCollisions(asteroid) {
     const collidingRocket = this.#getCollidingRocket(asteroid);
@@ -431,6 +450,7 @@ class App {
     this.asteroids = this.asteroids.filter((a) => a.lives > 0);
   }
 
+  // Căutare asteroid care lovește alt asteroid
   /** @param {Asteroid} asteroid */
   #getCollidingAsteroid(asteroid) {
     return this.asteroids.find(
@@ -441,6 +461,7 @@ class App {
     );
   }
 
+  // Căutare rachetă care lovește asteroid
   /** @param {Asteroid} asteroid */
   #getCollidingRocket(asteroid) {
     return this.player.rockets.find(
@@ -450,6 +471,7 @@ class App {
     );
   }
 
+  // Verificare dacă trebuie actualizat nivelul sau dacă jocul urmează să fie câștigat
   #checkNewLevel() {
     if (!this.asteroids.length) {
       if (this.level === MAX_LEVEL) {
@@ -482,6 +504,7 @@ class App {
     }
   }
 
+  // Verificare dacă playerul a fost învins
   #checkGameOver() {
     if (this.player.lives <= 0) {
       this.asteroids.forEach((asteroid) => {
@@ -505,6 +528,7 @@ class App {
     }
   }
 
+  // Întrerupere joc
   #cleanup() {
     this.#removeEventListeners();
     clearInterval(this.interval);
@@ -516,6 +540,7 @@ class App {
     }
   }
 
+  // Desenare statistici (vieți rămase, scor, nivel actual)
   #setStats() {
     drawText({
       fontSize: 32,
@@ -548,6 +573,7 @@ class App {
     });
   }
 
+  // Salvare scor în local storage
   #saveScore() {
     try {
       let scores = JSON.parse(localStorage.getItem("scores")) || [];
@@ -625,6 +651,7 @@ class App {
     this.player.y = event.y;
   };
 
+  // Adăugare eventuri în funcție de modul de joc ales
   #addEventListeners() {
     if (this.gameplayMode === "keyboard" || this.gameplayMode === "both") {
       document.addEventListener("keydown", this.#onKeyDown);
