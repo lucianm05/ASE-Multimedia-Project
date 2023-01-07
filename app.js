@@ -1,5 +1,7 @@
 "use strict";
+const root = document.getElementById("root");
 const form = document.getElementById("form");
+const btnViewLeaderboard = document.getElementById("view-leaderboard");
 const canvas = document.getElementById("game-canvas");
 /** @type {CanvasRenderingContext2D} */
 const canvasContext = canvas.getContext("2d");
@@ -12,6 +14,7 @@ const PLAYER_MAX_LIVES = 3;
 const ROCKET_SPEED = 700;
 const ROCKET_RADIUS = 3;
 const SCORE_MULTIPLIER = 50;
+const MAX_LEVEL = 3;
 
 const keys = {
   z: "z",
@@ -29,6 +32,18 @@ const LevelToAsteroidsCountMap = {
   1: 5,
   2: 7,
   3: 10,
+};
+
+const AsteroidLivesToColorsMap = {
+  1: "#3146e8",
+  2: "#43b1e8",
+  3: "#77e843",
+  4: "#eb5b34",
+};
+
+/** @param {HTMLElement} element */
+const toggleElement = (element) => {
+  element.classList.toggle("hide");
 };
 
 const distanceBetweenPoints = (x1, y1, x2, y2) =>
@@ -88,7 +103,6 @@ class Player {
     this.thrustX = 0;
     this.thrustY = 0;
     this.thrustAcceleration = 5;
-    this.friction = 0.99;
     this.lives = PLAYER_MAX_LIVES;
     this.hasImmunity = false;
     this.rockets = [];
@@ -169,8 +183,6 @@ class Player {
           break;
       }
     } else {
-      // this.thrustX -= (this.friction * this.thrustX) / FPS;
-      // this.thrustY -= (this.friction * this.thrustY) / FPS;
       this.thrustX = 0;
       this.thrustY = 0;
     }
@@ -194,6 +206,8 @@ class Player {
   shoot() {
     const angleCos = Math.cos(this.angle);
     const angleSin = Math.sin(this.angle);
+
+    if (this.rockets.length >= 3) return;
 
     this.rockets.push(
       new Rocket(
@@ -225,11 +239,9 @@ class Asteroid {
     this.setCoords();
     this.speed = 100;
     this.size = 50;
-    this.color = `rgb(${1 + Math.random() * 254}, ${1 + Math.random() * 254}, ${
-      1 + Math.random() * 254
-    })`;
     this.initialLives = Math.ceil(Math.random() * ASTEROIDS_MAX_LIVES);
     this.lives = this.initialLives;
+    this.setColor();
     this.velocityX =
       ((Math.random() * this.speed) / FPS) * (Math.random() < 0.5 ? 1 : -1);
     this.velocityY =
@@ -273,6 +285,10 @@ class Asteroid {
     this.radius = (this.size * this.lives) / 2;
   }
 
+  setColor() {
+    this.color = AsteroidLivesToColorsMap[this.lives];
+  }
+
   isOffXBounds() {
     return this.x + this.radius > canvas.width || this.x - this.radius < 0;
   }
@@ -287,13 +303,17 @@ class App {
   player;
   /** @type {Asteroid[]}  */
   asteroids = [];
+  /** @type {'keyboard' | 'mouse' | 'both'} */
+  gameplayMode;
 
-  constructor() {
-    console.log("initializing game...");
-    form.style.display = "none";
+  constructor(gameplayMode) {
+    toggleElement(form);
+    toggleElement(btnViewLeaderboard);
     canvas.style.display = "block";
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+
+    this.gameplayMode = gameplayMode;
 
     this.level = 1;
     this.player = new Player();
@@ -309,9 +329,7 @@ class App {
 
   #update() {
     this.#setCanvasContext();
-    this.#updatePlayer();
-    this.#updateAsteroids();
-    this.#updateRockets();
+    this.#updateEntities();
     this.#setStats();
     this.#checkNewLevel();
     this.#checkGameOver();
@@ -342,6 +360,12 @@ class App {
     this.player.rockets.forEach((rocket) => {
       rocket.draw();
     });
+  }
+
+  #updateEntities() {
+    this.#updatePlayer();
+    this.#updateAsteroids();
+    this.#updateRockets();
   }
 
   #setCanvasContext() {
@@ -377,6 +401,7 @@ class App {
       collidingRocket.hasHitAsteroid = true;
       asteroid.lives -= 1;
       asteroid.setRadius();
+      asteroid.setColor();
     }
 
     if (asteroid.lives <= 0) {
@@ -428,9 +453,10 @@ class App {
 
   #checkNewLevel() {
     if (!this.asteroids.length) {
-      if (this.level === 3) {
+      if (this.level === MAX_LEVEL) {
+        this.#setStats();
+        this.#saveScore();
         this.#cleanup();
-        this.#update();
 
         canvasContext.fillStyle = "#00000025";
         canvasContext.fillRect(0, 0, canvas.width, canvas.height);
@@ -443,15 +469,12 @@ class App {
           x: canvas.width / 2,
           y: canvas.height / 2,
         });
-
-        localStorage.setItem(
-          `${this.player.nickname}-${this.player.score}`,
-          new Date().toISOString()
-        );
+        return;
       }
 
-      if (this.level < 3 && !this.asteroids.length) {
+      if (this.level < MAX_LEVEL && !this.asteroids.length) {
         this.level += 1;
+        this.player.lives += 1;
         this.#createAsteroids(LevelToAsteroidsCountMap[this.level]);
         this.player.setInitialCoords();
         this.player.giveImmunity();
@@ -526,6 +549,34 @@ class App {
     });
   }
 
+  #saveScore() {
+    try {
+      let scores = JSON.parse(localStorage.getItem("scores")) || [];
+
+      const newEntry = {
+        nickname: this.player.nickname,
+        score: this.player.score,
+        date: new Date().toISOString(),
+      };
+
+      const hasHigherScoreEntry = scores.find(
+        (entry) =>
+          entry.nickname === newEntry.nickname && entry.score > newEntry.score
+      );
+
+      if (hasHigherScoreEntry) return;
+
+      scores = scores.filter((entry) => entry.nickname !== newEntry.nickname);
+      scores.push(newEntry);
+      scores.sort((a, b) => b.score - a.score);
+      scores.slice(0, 10);
+
+      localStorage.setItem("scores", JSON.stringify(scores));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   #onKeyDown = (event) => {
     if (keys.arrows[event.key]) {
       this.player.isThrusting = true;
@@ -566,24 +617,79 @@ class App {
     }
   };
 
+  #onClick = () => {
+    this.player.shoot();
+  };
+
+  #onMouseMove = (event) => {
+    this.player.x = event.x;
+    this.player.y = event.y;
+  };
+
   #addEventListeners() {
-    document.addEventListener("keydown", this.#onKeyDown);
-    document.addEventListener("keyup", this.#onKeyUp);
+    if (this.gameplayMode === "keyboard" || this.gameplayMode === "both") {
+      document.addEventListener("keydown", this.#onKeyDown);
+      document.addEventListener("keyup", this.#onKeyUp);
+    }
+
+    if (this.gameplayMode === "mouse" || this.gameplayMode === "both") {
+      document.addEventListener("click", this.#onClick);
+      document.addEventListener("mousemove", this.#onMouseMove);
+    }
   }
 
   #removeEventListeners() {
     document.removeEventListener("keydown", this.#onKeyDown);
     document.removeEventListener("keyup", this.#onKeyDown);
+    document.removeEventListener("click", this.#onClick);
+    document.removeEventListener("mousemove", this.#onMouseMove);
   }
 }
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const input = form.querySelector("input");
-  const nickname = input.value;
+form.addEventListener(
+  "submit",
+  (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    const nickname = formData.get("nickname");
+    const gameplayMode = formData.get("gameplay_mode");
 
-  if (!nickname) return;
+    if (!nickname || !gameplayMode) return;
 
-  const app = new App();
-  app.player.nickname = nickname;
+    const app = new App(gameplayMode);
+    app.player.nickname = nickname;
+  },
+  false
+);
+
+btnViewLeaderboard.addEventListener("click", () => {
+  toggleElement(form);
+  toggleElement(btnViewLeaderboard);
+
+  const ol = document.createElement("ol");
+  const btnBack = document.createElement("button");
+  btnBack.classList.add("btn__back");
+  btnBack.textContent = "Back";
+
+  try {
+    const scores = JSON.parse(localStorage.getItem("scores")) || [];
+
+    scores.forEach((entry) => {
+      const li = document.createElement("li");
+      li.textContent = `${entry.nickname} - ${entry.score} points`;
+      ol.appendChild(li);
+    });
+  } catch (err) {
+    console.error(err);
+  }
+
+  root.appendChild(ol);
+  root.appendChild(btnBack);
+
+  btnBack.addEventListener("click", () => {
+    root.removeChild(ol);
+    root.removeChild(btnBack);
+    toggleElement(form);
+    toggleElement(btnViewLeaderboard);
+  });
 });

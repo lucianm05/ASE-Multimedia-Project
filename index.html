@@ -22,13 +22,61 @@
   <body>
     <div id="root">
       <form id="form" class="form">
-        <fieldset class="fieldset">
+        <fieldset class="fieldset__nickname">
           <label for="nickname">Enter your nickname</label>
-          <input id="nickname" type="text" placeholder="Nickname" required />
+          <input
+            id="nickname"
+            name="nickname"
+            type="text"
+            placeholder="Nickname"
+            required
+          />
         </fieldset>
 
-        <button class="">Start game</button>
+        <fieldset class="fieldset__gameplay-mode">
+          <legend>Gameplay mode</legend>
+
+          <div>
+            <label for="both">Keyboard & Mouse</label>
+            <input
+              type="radio"
+              id="both"
+              value="both"
+              name="gameplay_mode"
+              required
+              checked
+            />
+          </div>
+
+          <div>
+            <label for="keyboard">Keyboard</label>
+            <input
+              type="radio"
+              id="keyboard"
+              value="keyboard"
+              name="gameplay_mode"
+              required
+            />
+          </div>
+
+          <div>
+            <label for="mouse">Mouse</label>
+            <input
+              type="radio"
+              id="mouse"
+              value="mouse"
+              name="gameplay_mode"
+              required
+            />
+          </div>
+        </fieldset>
+
+        <button>Start Game</button>
       </form>
+
+      <button id="view-leaderboard" type="button" class="btn__view-leaderboard">
+        View Leaderboard
+      </button>
 
       <canvas id="game-canvas"></canvas>
     </div>

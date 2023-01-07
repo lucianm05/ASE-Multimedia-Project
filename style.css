@@ -41,8 +41,6 @@
 
 .form label {
   width: 100%;
-  font-size: 2rem;
-  margin-bottom: 1rem;
 }
 
 .form input {
@@ -52,10 +50,61 @@
   border-radius: 4px;
 }
 
-.form button {
+.fieldset__nickname label {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.fieldset__gameplay-mode legend {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.fieldset__gameplay-mode div {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.fieldset__gameplay-mode div:not(:first-of-type) {
+  margin-top: 0.5rem;
+}
+
+.fieldset__gameplay-mode label {
+  font-size: 1.5rem;
+}
+
+button {
   width: max-content;
   padding: 0.5rem 1rem;
   font-size: 1.5rem;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.btn__view-leaderboard {
+  margin-top: 5rem;
+  background: #0e0836;
+  color: white;
+  border-color: white;
+}
+
+.btn__back {
+  margin-top: 5rem;
+}
+
+.hide {
+  display: none;
+}
+
+ol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+li {
+  font-size: 1.5rem;
+  color: white;
+  margin-top: 0.5rem;
 }
